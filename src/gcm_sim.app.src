@@ -1,0 +1,45 @@
+%%-*- mode: erlang -*-
+{application, gcm_sim,
+ [
+  {description, "gcm_sim"},
+  {vsn, "1"},
+  {registered, [gcm_sim, gcm_sim_sup]},
+  {applications, [
+                  kernel,
+                  stdlib,
+                  sasl,
+                  inets,
+                  crypto,
+                  goldrush,
+                  lager,
+                  mochiweb,
+                  webmachine,
+                  jsx,
+                  sc_util
+                 ]},
+  {mod, { gcm_sim_app, []}},
+  {modules, [
+             gcm_sim,
+             gcm_sim_sup,
+             gcm_sim_resource]},
+  {env, [
+         {wm_config, [
+                      {ip, "0.0.0.0"},
+                      {port, 5228},
+                      {log_dir, "log"},
+                      {dispatch, [
+                                  {["gcm", "send"], gcm_sim_resource,
+                                   []}
+                                 ]}
+                     ]},
+         {lager, [
+                  {handlers, [
+                              {lager_console_backend, debug}
+                             ]}
+                 ]}
+        ]},
+  {maintainers, []},
+  {licenses, []},
+  {links, []}
+ ]}.
+

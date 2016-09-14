@@ -1,0 +1,172 @@
+@author Edwin Fine <efine@silentcircle.com>
+@copyright 2016 Silent Circle
+@version {@version}
+@title Google Cloud Messaging (GCM) Simulator
+
+@doc This is an HTTP server that simulates the GCM server to some degree.
+
+<b>WARNING</b>: Work in progress.
+
+Obviously it does not actually message Android clients, but you can
+use it to force known responses for testing without needing a Google
+account, or even access to the Internet.
+
+The idea is simple: you tell the simulator what response you want.
+
+Options are:
+
+<ul>
+<li>HTTP 200 and documented GCM JSON success responses</li>
+<li>HTTP code: 400, 401, 5xx</li>
+</ul>
+
+You tell it what response you want using special headers.
+
+=== X-GCMSimulator-StatusCode ===
+
+The desired status code, e.g. 200. If omitted, 200 is the default.
+
+=== X-GCMSimulator-JSON ===
+
+Specific JSON to return, or path of server-side JSON file.  Optional. If provided, `X-GCMSimulator-Results' will be ignored.
+
+=== X-GCMSimulator-Results ===
+
+The status code must be 200 (or omitted), failing which this header will be ignored.
+
+The header must be in the format shown below. Examples will follow.
+
+```
+Header ::= NameValuePairs OptHeader
+OptHeader ::= ';' Header | <empty>
+NameValuePairs ::= NameValuePair OptNameValuePairs
+OptNameValuePairs ::= ',' NameValuePair | <empty>
+NameValuePair ::= Name ':' Value
+Name ::= message_id | registration_id | error
+'''
+
+The numbers returned in the JSON `success', `failure', and `error' fields will be set as follows:
+
+```
+success = total - failure - canonical_ids
+failure = number of error fields
+canonical_ids = number of registration_ids
+'''
+
+If a `registration_id' is provided, `message_id' may be omitted and it will automatically be generated in the response.
+
+=== X-GCMSimulator-Retry-After ===
+
+Force the simulator to include a `Retry-After' header set to this number of seconds.
+
+== TODO ==
+
+<ul>
+<li>Complete the simulator - it's still a work in progress.</li>
+<li>Support POST over https.</li>
+</ul>
+
+== API ==
+
+```
+POST /your-path HTTP/1.1
+Accept: application/json
+Content-Type: application/json
+<Special Headers>
+...
+<Regular GCM JSON>
+'''
+
+===  Examples of requests using special headers ===
+
+```
+POST /your-path HTTP/1.1
+Accept: application/json
+Content-Type: application/json
+X-GCMSimulator-StatusCode: 400
+'''
+
+```
+POST /your-path HTTP/1.1
+Accept: application/json
+Content-Type: application/json
+X-GCMSimulator-StatusCode: 200
+X-GCMSimulator-Results: message_id:1000; registration_id:SomeNewRegId; error:InvalidRegistration
+'''
+
+== Configuration ==
+
+<ul>
+<li>`config/vm.args' - edit the environment variables `WEBMACHINE_IP' and
+`WEBMACHINE_PORT'. This config will change more often than the other. In this
+file, the default IP is set to `0.0.0.0', and the default port is `5228'.</li>
+</ul>
+
+=== URL Path Configuration ===
+
+Obviously we can't POST to <a
+href="https://gcm-http.googleapis.com/gcm/send">Google's GCM URL</a> but we can
+at least use the `/gcm/send' part in the simulator, so the default path is
+`/gcm/send'. The simulator currently doesn't support https because I need to
+figure out what to do about the SSL certs.
+
+If for some reason you want to change this to `/my/special/path/', check out
+dispatch.conf and change `["gcm", "send"]' to `["my","special","path"]'.
+
+Be very careful that the Erlang syntax or webmachine pathspecs are correct. For
+technical details on the dispatching mechanism, visit the
+<a href="https://github.com/webmachine/webmachine/wiki/Dispatching">webmachine wiki.</a>
+Erlang experience is very helpful when reading this.
+
+== Running ==
+
+The simulator is meant to become part of a Common Test suite and be started inits own node, or you can
+start it manually in an Erlang shell:
+
+```
+make run
+'''
+
+=== Example test ===
+
+```
+$ curl -s \
+    -H 'Content-Type: application/json' \
+    -H 'X-GCMSimulator-StatusCode: 200' \
+    -H 'X-GCMSimulator-Results: message_id:0:1358221350928814%921c249af9fd7ecd' \
+    --data-binary '{"registration_ids":["1"]}' \
+    http://localhost:5228/gcm/send | \
+    jq -C .
+{
+  "multicast_id": 8640044358461744000,
+  "success": 1,
+  "failure": 0,
+  "canonical_ids": 0,
+  "results": [
+    {
+      "message_id": "0:1358221350928814%921c249af9fd7ecd"
+    }
+  ]
+}
+'''
+
+== Examples ==
+
+Example (real) response from Google:
+
+```
+{
+  "multicast_id": 8640031304644822000,
+  "success": 1,
+  "failure": 0,
+  "canonical_ids": 0,
+  "results": [
+    {
+      "message_id": "0:1358221350928814%921c249af9fd7ecd"
+    }
+  ]
+}
+'''
+
+@end
+

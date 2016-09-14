@@ -1,0 +1,10 @@
+.*.sw?
+test/*.beam
+doc/*.html
+doc/edoc-info
+doc/erlang.png
+doc/stylesheet.css
+_build
+rebar3
+log
+*.crashdump

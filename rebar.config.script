@@ -1,0 +1,128 @@
+
+%% -*- mode: erlang;erlang-indent-level: 4;indent-tabs-mode: nil -*-
+%% ex: ts=4 sw=4 ft=erlang et
+
+%% If EnvVar exists and has some content, call UserFun(Content, UserArg)
+%% and return its result.
+%% Otherwise return UserArg unchanged.
+RunIfEnvVar =
+    fun(EnvVar, UserFun, UserArg) ->
+            case os:getenv(EnvVar) of
+                false  -> UserArg;
+                []     -> UserArg;
+                EnvVal -> UserFun(EnvVal, UserArg)
+            end
+    end.
+
+Dbg = RunIfEnvVar("REBAR_EXTRA_DBG", fun(_EnvVal, _Arg) -> true end, false),
+
+DbgDo = fun(F) when is_function(F) ->
+                Dbg andalso F()
+        end.
+
+%%
+%% Helper functions
+%%
+
+%% Strip any combination of newline and whitespace off both ends of S
+StrStrip = fun(S, F, S) ->
+                   S;
+              (S, F, _) ->
+                   F(string:strip(string:strip(S, both, $\n), both), F, S)
+           end.
+
+StrClean = fun(S) ->
+                   StrStrip(S, StrStrip, "")
+           end.
+
+GetFileAppVersion =
+    fun() ->
+            case file:read_file("APP_VERSION") of
+                {ok, BVsn} ->
+                    DbgDo(fun() -> io:format("File vsn: ~p~n", [BVsn]) end),
+                    S = StrClean(binary_to_list(BVsn)),
+                    DbgDo(fun() -> io:format("Cleaned vsn: ~p~n", [S]) end),
+                    S;
+                _ ->
+                    undefined
+            end
+    end.
+
+GetAppVersion = fun() ->
+                      case os:getenv("APP_VERSION") of
+                          X when X =:= false;
+                                 X =:= [] -> GetFileAppVersion();
+                          Val -> StrClean(Val)
+                      end
+                end.
+
+ValTarget =
+    fun(Target) ->
+            TargAtom = list_to_atom(Target),
+            lists:member(TargAtom, ['github', 'gitlab', 'stash']) orelse
+                throw({bad_edown_target, Target}),
+            TargAtom
+    end.
+
+%%
+%% Funs that modify the config. These are conditionally run using RunIfEnvVar.
+%% Funs take two parameters: the first is the value of the environment
+%% variable, the second the rebar config.
+%% Funs return the second parameter, possibly modified.
+%%
+
+ChangeEdownTarget = fun(Target, Cfg) ->
+                            NewTarget = {edown_target, ValTarget(Target)},
+                            Opts = proplists:get_value(edoc_opts, Cfg, []),
+                            NewOpts = lists:keystore(edown_target, 1, Opts,
+                                                     NewTarget),
+                            lists:keystore(edoc_opts, 1, Cfg,
+                                           {edoc_opts, NewOpts})
+                    end.
+
+ChangeEdownUrl = fun(Url, Cfg) ->
+                         Opts0 = proplists:get_value(edoc_opts, Cfg, []),
+                         NewReadme = {"./README.md", Url},
+                         Opts = lists:keystore(top_level_readme, 1, Opts0,
+                                               {top_level_readme, NewReadme}),
+                         lists:keystore(edoc_opts, 1, Cfg, {edoc_opts, Opts})
+                 end.
+
+%%
+%% Funs that run the change function if the environment variable is present.
+%%
+CfgEdownTarget = fun(Cfg) ->
+                         RunIfEnvVar("EDOWN_TARGET", ChangeEdownTarget, Cfg)
+                 end.
+
+CfgEdownUrl = fun(Cfg) ->
+                      RunIfEnvVar("EDOWN_TOP_LEVEL_README_URL",
+                                  ChangeEdownUrl, Cfg)
+              end.
+
+%% Override edoc '@version' macro value to be current APP_VERSION.
+CfgVersion =
+    fun(Cfg) ->
+            case GetAppVersion() of
+                undefined ->
+                    Cfg;
+                Vsn when is_list(Vsn) ->
+                    VsnDef = {version, Vsn},
+                    Opts0 = proplists:get_value(edoc_opts, Cfg, []),
+                    Defs = case proplists:get_value(def, Opts0, []) of
+                               Macros when is_list(Macros) ->
+                                   [VsnDef | Macros -- [VsnDef]];
+                               {_Name, _Str} = Macro ->
+                                   [VsnDef | [Macro] -- [VsnDef]]
+                           end,
+                    Opts = lists:keystore(def, 1, Opts0, {def, Defs}),
+                    lists:keystore(edoc_opts, 1, Cfg, {edoc_opts, Opts})
+            end
+    end.
+
+%% Finally, chain the config change functions
+NC = lists:foldl(fun(F, Cfg) -> F(Cfg) end, CONFIG,
+                 [CfgEdownUrl, CfgEdownTarget, CfgVersion]),
+DbgDo(fun() -> io:format("~p~n", [NC]) end),
+NC.
+
