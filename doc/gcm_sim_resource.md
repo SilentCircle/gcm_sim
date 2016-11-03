@@ -8,7 +8,7 @@
 
 GCM Simulator webmachine_resource.
 
-Copyright (c) 2013 Silent Circle, LLC.
+Copyright (c) 2013-2016 Silent Circle, LLC.
 
 __Authors:__ Edwin Fine ([`efine@silentcircle.com`](mailto:efine@silentcircle.com)).
 

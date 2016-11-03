@@ -8,3 +8,5 @@ _build
 rebar3
 log
 *.crashdump
+ebin/
+.rebar3/
