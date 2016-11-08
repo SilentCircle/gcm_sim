@@ -118,6 +118,8 @@ config_debug(Config) ->
     case pv(debug, Config, false) of
         false ->
             ok;
+        true ->
+            ok;
         [_|_] = DbgFilePath ->
             {trace, DbgFilePath}
     end.
@@ -355,8 +357,8 @@ sim_results([{_,_}|_] = Cfg) ->
         undefined ->
             ?throwExcMsg(sim_results_required,
                          "'results' property is required", []);
-        [_|_] = Str ->
-            parse_sim_results(Str)
+        Results ->
+            parse_sim_results(sc_util:to_list(Results))
     end.
 
 %% @doc Return the predefined results provided by header,
@@ -581,7 +583,7 @@ pv(K, PL, Def) ->
     proplists:get_value(K, PL, Def).
 
 pvs(KeysAndDefs, PL) ->
-    [{Key, pv(Key, PL, Def)} || {Key, Def} <- KeysAndDefs, Def =/= undefined].
+    [{Key, pv(Key, PL, Def)} || {Key, Def} <- KeysAndDefs].
 
 -compile({inline, [{make_true, 1}]}).
 make_true(_X) -> true.
@@ -613,8 +615,9 @@ hdr_to_integer(HeaderName, ReqData, Default) when is_integer(Default) ->
     end.
 
 -spec is_debug(wrq(), ctx()) -> boolean().
-is_debug(ReqData, _Context) ->
-    get_req_hdr("X-GCMSimulator-Debug", ReqData, "false") =:= "true".
+is_debug(ReqData, #ctx{cfg = Config}) ->
+    get_req_hdr("X-GCMSimulator-Debug", ReqData, "false") =:= "true" orelse
+    pv(debug, Config, false) =:= true.
 
 -spec get_req_hdr(string(), wrq()) -> string() | 'undefined'.
 get_req_hdr(HeaderName, ReqData) ->
@@ -772,7 +775,7 @@ validate_rest(EJSON) ->
         {<<"time_to_live">>, ?WEEKS_TO_SECS(4)},
         {<<"restricted_package_name">>, undefined},
         {<<"dry_run">>, false},
-        {<<"data">>, undefined}
+        {<<"data">>, []}
     ],
     Props = pvs(KeysAndDefs, EJSON),
     [validate_gcm_field(KV) || KV <- Props],
